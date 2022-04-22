@@ -3,7 +3,7 @@ fn main() {
     println!("");
     // genotype value lookups
     println!("/// Lookup table for unpacking of genotype values from bed bytes");
-    println!("const BED_LOOKUP_GENOTYPE: [f32; 1024] = [");
+    println!("pub const BED_LOOKUP_GENOTYPE: [f32; 1024] = [");
     (0..=255).for_each(|v| {
         let mut b: u8 = v;
         for _ in 0..4 {
@@ -21,7 +21,7 @@ fn main() {
     println!("");
     // validity lookups
     println!("/// Lookup table for marking valid vs missing data in bed bytes");
-    println!("const BED_LOOKUP_VALIDITY: [f32; 1024] = [");
+    println!("pub const BED_LOOKUP_VALIDITY: [f32; 1024] = [");
     (0..=255).for_each(|v| {
         let mut b: u8 = v;
         for _ in 0..4 {
@@ -39,7 +39,7 @@ fn main() {
     println!("");
     // combined lookups
     println!("/// Lookup table for genotype values and valid data markers");
-    println!("const BED_LOOKUP_GENOTYPE_AND_VALIDITY: [f32; 2048] = [");
+    println!("pub const BED_LOOKUP_GENOTYPE_AND_VALIDITY: [f32; 2048] = [");
     (0..=255).for_each(|v| {
         let mut b: u8 = v;
         for _ in 0..4 {
