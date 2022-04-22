@@ -37,15 +37,6 @@ impl BedVecContig {
 }
 
 pub struct BedVec {
-    // we have to use u32 for the indices, or usize (so 4 bytes or 8 bytes)
-    // so we will have n * 0.2 * 4 bytes (8 bytes) = 0.8~1.6 * n bytes
-    // vs n bytes (using u8 for the storage) if storing all the data.
-    // so may or may not save space. Might gain speed though.
-    // TODO: this might be fast if in a single vector with a split index to
-    // mark where the twos begin.
-    // i.e.
-    // ixs: Vec<u32>,
-    // twos_from: usize,
     ones: Vec<u32>,
     twos: Vec<u32>,
 }
@@ -85,6 +76,7 @@ pub fn random_genotype_vec(n: usize, maf: f64) -> Vec<u8> {
 mod tests {
     use super::*;
     use test::Bencher;
+    use ndarray::arr1;
 
     #[test]
     fn test_scaled_add() {

@@ -2,5 +2,7 @@
 #![feature(test)]
 
 extern crate test;
+extern crate blas_src;
+extern crate openblas_src;
 
 pub mod bedvec;
