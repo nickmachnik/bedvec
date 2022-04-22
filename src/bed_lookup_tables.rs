@@ -1,7 +1,7 @@
 //! Lookup tables for unpacking of bed bytes
 
 /// Lookup table for unpacking of genotype values from bed bytes
-const BED_LOOKUP_GENOTYPE: [f32; 1024] = [
+pub const BED_LOOKUP_GENOTYPE: [f32; 1024] = [
 	2., 2., 2., 2., 0., 2., 2., 2., 1., 2., 2., 2., 0., 2., 2., 2., 2., 0., 2., 2., 0., 0., 2., 2.,
 	1., 0., 2., 2., 0., 0., 2., 2., 2., 1., 2., 2., 0., 1., 2., 2., 1., 1., 2., 2., 0., 1., 2., 2.,
 	2., 0., 2., 2., 0., 0., 2., 2., 1., 0., 2., 2., 0., 0., 2., 2., 2., 2., 0., 2., 0., 2., 0., 2.,
@@ -48,7 +48,7 @@ const BED_LOOKUP_GENOTYPE: [f32; 1024] = [
 ];
 
 /// Lookup table for marking valid vs missing data in bed bytes
-const BED_LOOKUP_VALIDITY: [f32; 1024] = [
+pub const BED_LOOKUP_VALIDITY: [f32; 1024] = [
 	1., 1., 1., 1., 0., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 0., 1., 1., 0., 0., 1., 1.,
 	1., 0., 1., 1., 1., 0., 1., 1., 1., 1., 1., 1., 0., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.,
 	1., 1., 1., 1., 0., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 0., 1., 0., 1., 0., 1.,
@@ -95,7 +95,7 @@ const BED_LOOKUP_VALIDITY: [f32; 1024] = [
 ];
 
 /// Lookup table for genotype values and valid data markers
-const BED_LOOKUP_GENOTYPE_AND_VALIDITY: [f32; 2048] = [
+pub const BED_LOOKUP_GENOTYPE_AND_VALIDITY: [f32; 2048] = [
 	2., 2., 2., 2., 1., 1., 1., 1., 0., 2., 2., 2., 0., 1., 1., 1., 1., 2., 2., 2., 1., 1., 1., 1.,
 	0., 2., 2., 2., 1., 1., 1., 1., 2., 0., 2., 2., 1., 0., 1., 1., 0., 0., 2., 2., 0., 0., 1., 1.,
 	1., 0., 2., 2., 1., 0., 1., 1., 0., 0., 2., 2., 1., 0., 1., 1., 2., 1., 2., 2., 1., 1., 1., 1.,
