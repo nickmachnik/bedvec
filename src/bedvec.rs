@@ -69,10 +69,11 @@ impl BinBedVecRM {
             .enumerate()
             .map(|(byte_ix, byte)| {
                 let unpacked_byte = self.unpack_byte_to_genotype_and_validity(byte);
-                unpacked_byte[0] * unpacked_byte[4] * v[byte_ix]
-                    + unpacked_byte[1] * unpacked_byte[5] * v[byte_ix + 1]
-                    + unpacked_byte[2] * unpacked_byte[6] * v[byte_ix + 2]
-                    + unpacked_byte[3] * unpacked_byte[7] * v[byte_ix + 3]
+                let v_ix = byte_ix * 4;
+                unpacked_byte[0] * unpacked_byte[4] * v[v_ix]
+                    + unpacked_byte[1] * unpacked_byte[5] * v[v_ix + 1]
+                    + unpacked_byte[2] * unpacked_byte[6] * v[v_ix + 2]
+                    + unpacked_byte[3] * unpacked_byte[7] * v[v_ix + 3]
             })
             .sum()
     }
@@ -160,6 +161,16 @@ pub fn random_genotype_vec(n: usize, maf: f64) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_bin_bed_bev_rm_mul_with_vec() {
+        let num_individuals = 2;
+        let num_markers = 4;
+        let data: Vec<u8> = vec![0b11000110, 0b10010011];
+        let v: Vec<f32> = vec![1., 2., 3., 4.];
+        let x = BinBedVecRM::new(data, num_individuals, num_markers);
+        assert_eq!(vec![7., 8.], x.mul_with_vec(&v));
+    }
 
     #[test]
     fn test_scaled_add() {
