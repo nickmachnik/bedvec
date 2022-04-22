@@ -1,5 +1,54 @@
 use rand::distributions::Distribution;
+use rand::Rng;
 use statrs::distribution::Binomial;
+
+/// Row-major bed-data in memory.
+pub struct BinBedVecRM {
+    data: Vec<u8>,
+    num_individuals: usize,
+    num_markers: usize,
+    row_padding_bits: usize,
+    bytes_per_row: usize,
+}
+
+impl BinBedVecRM {
+    pub fn new(data: Vec<u8>, num_individuals: usize, num_markers: usize) -> Self {
+        let row_padding_bits = (num_markers % 4) * 2;
+        let bytes_per_row = if row_padding_bits == 0 {
+            num_markers / 4
+        } else {
+            num_markers / 4 + 1
+        };
+        Self {
+            data,
+            num_individuals,
+            num_markers,
+            row_padding_bits,
+            bytes_per_row,
+        }
+    }
+
+    /// Create a completely random new BinBedVecRM of given dimensions.
+    pub fn new_rnd(num_individuals: usize, num_markers: usize) -> Self {
+        let mut rng = rand::thread_rng();
+        let row_padding_bits = (num_markers % 4) * 2;
+        let bytes_per_row = if row_padding_bits == 0 {
+            num_markers / 4
+        } else {
+            num_markers / 4 + 1
+        };
+        let data: Vec<u8> = (0..(num_individuals * bytes_per_row))
+            .map(|_| rng.gen())
+            .collect();
+        Self {
+            data,
+            num_individuals,
+            num_markers,
+            row_padding_bits,
+            bytes_per_row,
+        }
+    }
+}
 
 pub struct BedVecContig {
     ixs: Vec<u32>,
@@ -75,8 +124,8 @@ pub fn random_genotype_vec(n: usize, maf: f64) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use test::Bencher;
     use ndarray::arr1;
+    use test::Bencher;
 
     #[test]
     fn test_scaled_add() {
