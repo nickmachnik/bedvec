@@ -1,5 +1,7 @@
+use crate::bed_lookup_tables::*;
 use rand::distributions::Distribution;
 use rand::Rng;
+use rayon::prelude::*;
 use statrs::distribution::Binomial;
 
 /// Row-major bed-data in memory.
@@ -48,6 +50,40 @@ impl BinBedVecRM {
             bytes_per_row,
         }
     }
+
+    pub fn mul_with_vec(&self, v: &[f32]) -> Vec<f32> {
+        (0..self.num_individuals)
+            .into_par_iter()
+            .map(|row_ix| self.row_dot_product(row_ix, v))
+            .collect()
+    }
+
+    // TODO: this doesn't do standardization yet.
+    // It also doesn't take into account the number of padding bits.
+    // Ideally these will be always NAN, s.t. they are zero in the end anyway.
+    #[inline(always)]
+    fn row_dot_product(&self, row_ix: usize, v: &[f32]) -> f32 {
+        let start_ix = row_ix * self.bytes_per_row;
+        self.data[start_ix..start_ix + self.bytes_per_row]
+            .par_iter()
+            .enumerate()
+            .map(|(byte_ix, byte)| {
+                let unpacked_byte = self.unpack_byte_to_genotype_and_validity(byte);
+                unpacked_byte[0] * unpacked_byte[4] * v[byte_ix]
+                    + unpacked_byte[1] * unpacked_byte[5] * v[byte_ix + 1]
+                    + unpacked_byte[2] * unpacked_byte[6] * v[byte_ix + 2]
+                    + unpacked_byte[3] * unpacked_byte[7] * v[byte_ix + 3]
+            })
+            .sum()
+    }
+
+    #[inline(always)]
+    fn unpack_byte_to_genotype_and_validity(&self, byte: &u8) -> [f32; 8] {
+        let start_ix = *byte as usize * 8;
+        BED_LOOKUP_GENOTYPE_AND_VALIDITY[start_ix..start_ix + 8]
+            .try_into()
+            .expect("Failed to unpack bed byte")
+    }
 }
 
 pub struct BedVecContig {
@@ -56,7 +92,7 @@ pub struct BedVecContig {
 }
 
 impl BedVecContig {
-    pub fn new(genotypes: &Vec<u8>) -> Self {
+    pub fn new(genotypes: &[u8]) -> Self {
         let mut ones = Vec::new();
         let mut twos = Vec::new();
         for (ix, g) in genotypes.iter().enumerate() {
@@ -74,7 +110,7 @@ impl BedVecContig {
         }
     }
 
-    pub fn scaled_add(&self, lhs: &mut Vec<f64>, scalar: f64) {
+    pub fn scaled_add(&self, lhs: &mut [f64], scalar: f64) {
         self.ixs.iter().enumerate().for_each(|(ix_pos, ix)| {
             if ix_pos < self.twos_from {
                 lhs[*ix as usize] += scalar
@@ -91,7 +127,7 @@ pub struct BedVec {
 }
 
 impl BedVec {
-    pub fn new(genotypes: &Vec<u8>) -> Self {
+    pub fn new(genotypes: &[u8]) -> Self {
         let mut ones = Vec::new();
         let mut twos = Vec::new();
         for (ix, g) in genotypes.iter().enumerate() {
@@ -105,7 +141,7 @@ impl BedVec {
         Self { ones, twos }
     }
 
-    pub fn scaled_add(&self, lhs: &mut Vec<f64>, scalar: f64) {
+    pub fn scaled_add(&self, lhs: &mut [f64], scalar: f64) {
         self.ones.iter().for_each(|ix| lhs[*ix as usize] += scalar);
         self.twos
             .iter()
@@ -150,15 +186,6 @@ mod tests {
         bvc.scaled_add(&mut res_v, w);
         assert_eq!(res_v, expected);
     }
-
-    fn prep() -> (BedVec, BedVecContig, Vec<u8>) {
-        let n = 1000;
-        let maf = 0.2;
-        let gtv = random_genotype_vec(n, maf);
-        let bv = BedVec::new(&gtv);
-        let bvc = BedVecContig::new(&gtv);
-        (bv, bvc, gtv)
-    }
 }
 
 #[cfg(all(feature = "unstable", test))]
@@ -168,6 +195,15 @@ mod bench {
     use super::*;
     use ndarray::arr1;
     use test::Bencher;
+
+    fn prep() -> (BedVec, BedVecContig, Vec<u8>) {
+        let n = 1000;
+        let maf = 0.2;
+        let gtv = random_genotype_vec(n, maf);
+        let bv = BedVec::new(&gtv);
+        let bvc = BedVecContig::new(&gtv);
+        (bv, bvc, gtv)
+    }
 
     #[bench]
     fn bench_scalar_add(b: &mut Bencher) {
