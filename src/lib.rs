@@ -4,4 +4,5 @@
 extern crate blas_src;
 extern crate openblas_src;
 
+mod bed_lookup_tables;
 pub mod bedvec;
