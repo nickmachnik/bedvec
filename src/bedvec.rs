@@ -124,8 +124,6 @@ pub fn random_genotype_vec(n: usize, maf: f64) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ndarray::arr1;
-    use test::Bencher;
 
     #[test]
     fn test_scaled_add() {
@@ -161,6 +159,15 @@ mod tests {
         let bvc = BedVecContig::new(&gtv);
         (bv, bvc, gtv)
     }
+}
+
+#[cfg(all(feature = "unstable", test))]
+mod bench {
+    extern crate test;
+
+    use super::*;
+    use ndarray::arr1;
+    use test::Bencher;
 
     #[bench]
     fn bench_scalar_add(b: &mut Bencher) {
