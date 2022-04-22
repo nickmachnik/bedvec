@@ -7,9 +7,11 @@ use statrs::distribution::Binomial;
 /// Row-major bed-data in memory.
 pub struct BinBedVecRM {
     data: Vec<u8>,
+    col_means: Vec<f32>,
+    col_std: Vec<f32>,
     num_individuals: usize,
     num_markers: usize,
-    row_padding_bits: usize,
+    // row_padding_bits: usize,
     bytes_per_row: usize,
 }
 
@@ -21,13 +23,16 @@ impl BinBedVecRM {
         } else {
             num_markers / 4 + 1
         };
-        Self {
+        let mut res = Self {
             data,
+            col_means: vec![0.; num_markers],
+            col_std: vec![0.; num_markers],
             num_individuals,
             num_markers,
-            row_padding_bits,
             bytes_per_row,
-        }
+        };
+        res.compute_col_stats();
+        res
     }
 
     /// Create a completely random new BinBedVecRM of given dimensions.
@@ -42,12 +47,53 @@ impl BinBedVecRM {
         let data: Vec<u8> = (0..(num_individuals * bytes_per_row))
             .map(|_| rng.gen())
             .collect();
-        Self {
+        let mut res = Self {
             data,
+            col_means: vec![0.; num_markers],
+            col_std: vec![0.; num_markers],
             num_individuals,
             num_markers,
-            row_padding_bits,
             bytes_per_row,
+        };
+        res.compute_col_stats();
+        res
+    }
+
+    fn compute_col_stats(&mut self) {
+        let mut n: Vec<f32> = vec![0.; self.num_markers];
+        for (ix, byte) in self.data.iter().enumerate() {
+            let byte_start_col_ix = ix * 4;
+            let unpacked_byte = self.unpack_byte_to_genotype_and_validity(byte);
+            self.col_means[byte_start_col_ix] += unpacked_byte[0] * unpacked_byte[4];
+            n[byte_start_col_ix] += unpacked_byte[4];
+            self.col_means[byte_start_col_ix + 1] += unpacked_byte[1] * unpacked_byte[5];
+            n[byte_start_col_ix + 1] += unpacked_byte[5];
+            self.col_means[byte_start_col_ix + 2] += unpacked_byte[2] * unpacked_byte[6];
+            n[byte_start_col_ix + 2] += unpacked_byte[6];
+            self.col_means[byte_start_col_ix + 3] += unpacked_byte[3] * unpacked_byte[7];
+            n[byte_start_col_ix + 3] += unpacked_byte[7];
+        }
+        for (ix, e) in self.col_means.iter_mut().enumerate() {
+            *e /= n[ix];
+        }
+        for (ix, byte) in self.data.iter().enumerate() {
+            let byte_start_col_ix = ix * 4;
+            let unpacked_byte = self.unpack_byte_to_genotype_and_validity(byte);
+            self.col_std[byte_start_col_ix] +=
+                ((unpacked_byte[0] - self.col_means[byte_start_col_ix]) * unpacked_byte[4])
+                    .powf(2.);
+            self.col_std[byte_start_col_ix + 1] +=
+                ((unpacked_byte[1] - self.col_means[byte_start_col_ix + 1]) * unpacked_byte[5])
+                    .powf(2.);
+            self.col_std[byte_start_col_ix + 2] +=
+                ((unpacked_byte[2] - self.col_means[byte_start_col_ix + 2]) * unpacked_byte[6])
+                    .powf(2.);
+            self.col_std[byte_start_col_ix + 3] +=
+                ((unpacked_byte[3] - self.col_means[byte_start_col_ix + 3]) * unpacked_byte[7])
+                    .powf(2.);
+        }
+        for (ix, e) in self.col_std.iter_mut().enumerate() {
+            *e /= n[ix] - 1.;
         }
     }
 
