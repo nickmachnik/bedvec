@@ -62,7 +62,9 @@ impl BinBedVecRM {
     fn compute_col_stats(&mut self) {
         let mut n: Vec<f32> = vec![0.; self.num_markers];
         for (ix, byte) in self.data.iter().enumerate() {
-            let byte_start_col_ix = ix * 4;
+            dbg!(ix);
+            dbg!(byte);
+            let byte_start_col_ix = (ix * 4) % self.num_markers;
             let unpacked_byte = self.unpack_byte_to_genotype_and_validity(byte);
             self.col_means[byte_start_col_ix] += unpacked_byte[0] * unpacked_byte[4];
             n[byte_start_col_ix] += unpacked_byte[4];
@@ -77,7 +79,7 @@ impl BinBedVecRM {
             *e /= n[ix];
         }
         for (ix, byte) in self.data.iter().enumerate() {
-            let byte_start_col_ix = ix * 4;
+            let byte_start_col_ix = (ix * 4) % self.num_markers;
             let unpacked_byte = self.unpack_byte_to_genotype_and_validity(byte);
             self.col_std[byte_start_col_ix] +=
                 ((unpacked_byte[0] - self.col_means[byte_start_col_ix]) * unpacked_byte[4])
@@ -93,7 +95,7 @@ impl BinBedVecRM {
                     .powf(2.);
         }
         for (ix, e) in self.col_std.iter_mut().enumerate() {
-            *e /= n[ix] - 1.;
+            *e = (*e / (n[ix] - 1.)).sqrt();
         }
     }
 
@@ -209,7 +211,31 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_bin_bed_bev_rm_mul_with_vec() {
+    fn test_bin_vec_rm_stats() {
+        let num_individuals = 4;
+        let num_markers = 4;
+        let data: Vec<u8> = vec![0b11000110, 0b10010011, 0b11000110, 0b10010011];
+        let x = BinBedVecRM::new(data, num_individuals, num_markers);
+        // m = (
+        //  1., na, 2., 0.,
+        //  0., 2., na, 1.,
+        //  1., na, 2., 0.,
+        //  0., 2., na, 1.,
+        // )
+        assert_eq!(x.col_means, vec![0.5, 2., 2., 0.5]);
+        assert_eq!(
+            x.col_std,
+            vec![
+                (1.0_f32 / 3.0_f32).sqrt(),
+                0.,
+                0.,
+                (1.0_f32 / 3.0_f32).sqrt()
+            ]
+        );
+    }
+
+    #[test]
+    fn test_bin_bed_vec_rm_mul_with_vec() {
         let num_individuals = 2;
         let num_markers = 4;
         let data: Vec<u8> = vec![0b11000110, 0b10010011];
