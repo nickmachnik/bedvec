@@ -1,8 +1,82 @@
 use crate::bed_lookup_tables::*;
-use rand::distributions::Distribution;
 use rand::Rng;
 use rayon::prelude::*;
-use statrs::distribution::Binomial;
+
+// /// Colum-major bed-data in memory.
+// pub struct BedVecCM {
+//     data: Vec<u8>,
+//     col_means: Vec<f32>,
+//     col_std: Vec<f32>,
+//     num_individuals: usize,
+//     num_markers: usize,
+//     bytes_per_col: usize,
+// }
+
+// impl BedVecCM {
+//     pub fn new(data: Vec<u8>, num_individuals: usize, num_markers: usize) -> Self {
+//         let bytes_per_col = if (num_individuals % 4) == 0 {
+//             num_individuals / 4
+//         } else {
+//             num_individuals / 4 + 1
+//         };
+//         let mut res = Self {
+//             data,
+//             col_means: vec![0.; num_markers],
+//             col_std: vec![0.; num_markers],
+//             num_individuals,
+//             num_markers,
+//             bytes_per_col,
+//         };
+//         res.compute_col_stats();
+//         res
+//     }
+
+//     fn compute_col_stats(&mut self) {
+//         let mut n: Vec<f32> = vec![0.; self.num_markers];
+//         for (ix, byte) in self.data.iter().enumerate() {
+//             let col_ix = (ix * 4) % self.num_individuals;
+//             let unpacked_byte = self.unpack_byte_to_genotype_and_validity(byte);
+//             self.col_means[col_ix] += unpacked_byte[0] * unpacked_byte[4];
+//             n[col_ix] += unpacked_byte[4];
+//             self.col_means[col_ix] += unpacked_byte[1] * unpacked_byte[5];
+//             n[col_ix] += unpacked_byte[5];
+//             self.col_means[col_ix] += unpacked_byte[2] * unpacked_byte[6];
+//             n[col_ix] += unpacked_byte[6];
+//             self.col_means[col_ix] += unpacked_byte[3] * unpacked_byte[7];
+//             n[col_ix] += unpacked_byte[7];
+//         }
+//         for (ix, e) in self.col_means.iter_mut().enumerate() {
+//             *e /= n[ix];
+//         }
+//         for (ix, byte) in self.data.iter().enumerate() {
+//             let byte_start_col_ix = (ix * 4) % self.num_markers;
+//             let unpacked_byte = self.unpack_byte_to_genotype_and_validity(byte);
+//             self.col_std[byte_start_col_ix] +=
+//                 ((unpacked_byte[0] - self.col_means[byte_start_col_ix]) * unpacked_byte[4])
+//                     .powf(2.);
+//             self.col_std[byte_start_col_ix + 1] +=
+//                 ((unpacked_byte[1] - self.col_means[byte_start_col_ix + 1]) * unpacked_byte[5])
+//                     .powf(2.);
+//             self.col_std[byte_start_col_ix + 2] +=
+//                 ((unpacked_byte[2] - self.col_means[byte_start_col_ix + 2]) * unpacked_byte[6])
+//                     .powf(2.);
+//             self.col_std[byte_start_col_ix + 3] +=
+//                 ((unpacked_byte[3] - self.col_means[byte_start_col_ix + 3]) * unpacked_byte[7])
+//                     .powf(2.);
+//         }
+//         for (ix, e) in self.col_std.iter_mut().enumerate() {
+//             *e = (*e / (n[ix] - 1.)).sqrt();
+//         }
+//     }
+
+//     #[inline(always)]
+//     fn unpack_byte_to_genotype_and_validity(&self, byte: &u8) -> [f32; 8] {
+//         let start_ix = *byte as usize * 8;
+//         BED_LOOKUP_GENOTYPE_AND_VALIDITY[start_ix..start_ix + 8]
+//             .try_into()
+//             .expect("Failed to unpack bed byte")
+//     }
+// }
 
 /// Row-major bed-data in memory.
 pub struct BedVecRM {
@@ -17,8 +91,7 @@ pub struct BedVecRM {
 
 impl BedVecRM {
     pub fn new(data: Vec<u8>, num_individuals: usize, num_markers: usize) -> Self {
-        let row_padding_bits = (num_markers % 4) * 2;
-        let bytes_per_row = if row_padding_bits == 0 {
+        let bytes_per_row = if (num_markers % 4) == 0 {
             num_markers / 4
         } else {
             num_markers / 4 + 1
@@ -62,7 +135,7 @@ impl BedVecRM {
     fn compute_col_stats(&mut self) {
         let mut n: Vec<f32> = vec![0.; self.num_markers];
         for (ix, byte) in self.data.iter().enumerate() {
-            let byte_start_col_ix = (ix * 4) % self.num_markers;
+            let byte_start_col_ix = (ix * 4) % (self.bytes_per_row * 4);
             let unpacked_byte = self.unpack_byte_to_genotype_and_validity(byte);
             self.col_means[byte_start_col_ix] += unpacked_byte[0] * unpacked_byte[4];
             n[byte_start_col_ix] += unpacked_byte[4];
@@ -77,7 +150,7 @@ impl BedVecRM {
             *e /= n[ix];
         }
         for (ix, byte) in self.data.iter().enumerate() {
-            let byte_start_col_ix = (ix * 4) % self.num_markers;
+            let byte_start_col_ix = (ix * 4) % (self.bytes_per_row * 4);
             let unpacked_byte = self.unpack_byte_to_genotype_and_validity(byte);
             self.col_std[byte_start_col_ix] +=
                 ((unpacked_byte[0] - self.col_means[byte_start_col_ix]) * unpacked_byte[4])
