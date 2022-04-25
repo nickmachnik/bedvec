@@ -6,6 +6,7 @@ use std::arch::x86_64::*; // Intel SIMD intrinsic mappings
 pub type f32x8 = __m256;
 #[allow(non_upper_case_globals)]
 pub const f32x8_LENGTH: usize = 8;
+pub const f32x4_LENGTH: usize = 4;
 
 /// Return a 256-bit vector containing 8 infinity values of f32
 #[inline]
@@ -34,6 +35,13 @@ pub fn lowestf32(v: f32x8) -> f32 {
 pub fn from_slice(s: &[f32]) -> f32x8 {
     assert_eq!(s.len(), f32x8_LENGTH);
     unsafe { _mm256_set_ps(s[0], s[1], s[2], s[3], s[4], s[5], s[6], s[7]) }
+}
+
+///
+#[inline]
+pub fn broadcast_into_f32x8(s: &[f32]) -> f32x8 {
+    assert_eq!(s.len(), f32x4_LENGTH);
+    unsafe { _mm256_set_ps(s[0], s[1], s[2], s[3], s[0], s[1], s[2], s[3]) }
 }
 
 /// Permute 1, 2, or 4 wide chunks with adjacent chunks
