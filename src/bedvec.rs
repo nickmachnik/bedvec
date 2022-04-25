@@ -5,7 +5,7 @@ use rayon::prelude::*;
 use statrs::distribution::Binomial;
 
 /// Row-major bed-data in memory.
-pub struct BinBedVecRM {
+pub struct BedVecRM {
     data: Vec<u8>,
     col_means: Vec<f32>,
     col_std: Vec<f32>,
@@ -15,7 +15,7 @@ pub struct BinBedVecRM {
     bytes_per_row: usize,
 }
 
-impl BinBedVecRM {
+impl BedVecRM {
     pub fn new(data: Vec<u8>, num_individuals: usize, num_markers: usize) -> Self {
         let row_padding_bits = (num_markers % 4) * 2;
         let bytes_per_row = if row_padding_bits == 0 {
@@ -35,7 +35,7 @@ impl BinBedVecRM {
         res
     }
 
-    /// Create a completely random new BinBedVecRM of given dimensions.
+    /// Create a completely random new BedVecRM of given dimensions.
     pub fn new_rnd(num_individuals: usize, num_markers: usize) -> Self {
         let mut rng = rand::thread_rng();
         let row_padding_bits = (num_markers % 4) * 2;
@@ -215,7 +215,7 @@ mod tests {
         let num_individuals = 4;
         let num_markers = 4;
         let data: Vec<u8> = vec![0b11000110, 0b10010011, 0b11000110, 0b10010011];
-        let x = BinBedVecRM::new(data, num_individuals, num_markers);
+        let x = BedVecRM::new(data, num_individuals, num_markers);
         // m = (
         //  1., na, 2., 0.,
         //  0., 2., na, 1.,
@@ -240,7 +240,7 @@ mod tests {
         let num_markers = 4;
         let data: Vec<u8> = vec![0b11000110, 0b10010011];
         let v: Vec<f32> = vec![1., 2., 3., 4.];
-        let x = BinBedVecRM::new(data, num_individuals, num_markers);
+        let x = BedVecRM::new(data, num_individuals, num_markers);
         assert_eq!(vec![7., 8.], x.mul_with_vec(&v));
     }
 
