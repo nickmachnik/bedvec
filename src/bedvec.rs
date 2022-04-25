@@ -40,6 +40,7 @@ impl BedVecCM {
         for (ix, byte) in self.data.iter().enumerate() {
             let col_ix = (ix * 4) / self.num_individuals;
             let unpacked_byte = self.unpack_byte_to_genotype_and_validity(byte);
+            dbg!(unpacked_byte, col_ix);
             let mean_update = unpacked_byte[0] * unpacked_byte[4]
                 + unpacked_byte[1] * unpacked_byte[5]
                 + unpacked_byte[2] * unpacked_byte[6]
@@ -282,7 +283,23 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_bin_vec_rm_stats() {
+    fn test_bed_vec_cm_stats() {
+        let num_individuals = 4;
+        let num_markers = 4;
+        let data: Vec<u8> = vec![0b01001011, 0b11101101, 0b11111110, 0b10110011];
+        let x = BedVecCM::new(data, num_individuals, num_markers);
+        // m.T = (
+        //  0., 1., 2., na,
+        //  na, 0., 1., 0.,
+        //  1., 0., 0., 0.,
+        //  0., 2., 0., 1.,
+        // )
+        assert_eq!(x.col_means, vec![1., (1. / 3.), 0.25, 0.75]);
+        assert_eq!(x.col_std, vec![1.0, 0.57735026, 0.5, 0.95742714]);
+    }
+
+    #[test]
+    fn test_bed_vec_rm_stats() {
         let num_individuals = 4;
         let num_markers = 4;
         let data: Vec<u8> = vec![0b01001011, 0b11101101, 0b11111110, 0b10110011];
@@ -309,7 +326,7 @@ mod tests {
     }
 
     #[test]
-    fn test_bin_bed_vec_rm_right_multiply() {
+    fn test_bed_vec_rm_right_multiply() {
         let num_individuals = 4;
         let num_markers = 4;
         let data: Vec<u8> = vec![0b01001011, 0b11101101, 0b11111110, 0b10110011];
