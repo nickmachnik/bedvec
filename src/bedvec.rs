@@ -62,8 +62,6 @@ impl BedVecRM {
     fn compute_col_stats(&mut self) {
         let mut n: Vec<f32> = vec![0.; self.num_markers];
         for (ix, byte) in self.data.iter().enumerate() {
-            dbg!(ix);
-            dbg!(byte);
             let byte_start_col_ix = (ix * 4) % self.num_markers;
             let unpacked_byte = self.unpack_byte_to_genotype_and_validity(byte);
             self.col_means[byte_start_col_ix] += unpacked_byte[0] * unpacked_byte[4];
@@ -106,9 +104,6 @@ impl BedVecRM {
             .collect()
     }
 
-    // TODO: this doesn't do standardization yet.
-    // It also doesn't take into account the number of padding bits.
-    // Ideally these will be always NAN, s.t. they are zero in the end anyway.
     #[inline(always)]
     fn row_dot_product(&self, row_ix: usize, v: &[f32]) -> f32 {
         let start_ix = row_ix * self.bytes_per_row;
@@ -118,10 +113,18 @@ impl BedVecRM {
             .map(|(byte_ix, byte)| {
                 let unpacked_byte = self.unpack_byte_to_genotype_and_validity(byte);
                 let v_ix = byte_ix * 4;
-                unpacked_byte[0] * unpacked_byte[4] * v[v_ix]
-                    + unpacked_byte[1] * unpacked_byte[5] * v[v_ix + 1]
-                    + unpacked_byte[2] * unpacked_byte[6] * v[v_ix + 2]
-                    + unpacked_byte[3] * unpacked_byte[7] * v[v_ix + 3]
+                // this is (x_j - mu_j * I[x_j is not na]) / sig_j * v_j
+                ((unpacked_byte[0] - self.col_means[v_ix]) * unpacked_byte[4] / self.col_std[v_ix]
+                    * v[v_ix])
+                    + ((unpacked_byte[1] - self.col_means[v_ix + 1]) * unpacked_byte[5]
+                        / self.col_std[v_ix + 1]
+                        * v[v_ix + 1])
+                    + ((unpacked_byte[2] - self.col_means[v_ix + 2]) * unpacked_byte[6]
+                        / self.col_std[v_ix + 2]
+                        * v[v_ix + 2])
+                    + ((unpacked_byte[3] - self.col_means[v_ix + 3]) * unpacked_byte[7]
+                        / self.col_std[v_ix + 3]
+                        * v[v_ix + 3])
             })
             .sum()
     }
@@ -214,34 +217,40 @@ mod tests {
     fn test_bin_vec_rm_stats() {
         let num_individuals = 4;
         let num_markers = 4;
-        let data: Vec<u8> = vec![0b11000110, 0b10010011, 0b11000110, 0b10010011];
+        let data: Vec<u8> = vec![0b01001011, 0b11101101, 0b11111110, 0b10110011];
         let x = BedVecRM::new(data, num_individuals, num_markers);
         // m = (
-        //  1., na, 2., 0.,
-        //  0., 2., na, 1.,
-        //  1., na, 2., 0.,
-        //  0., 2., na, 1.,
+        //  0., 1., 2., na,
+        //  na, 0., 1., 0.,
+        //  1., 0., 0., 0.,
+        //  0., 2., 0., 1.,
         // )
-        assert_eq!(x.col_means, vec![0.5, 2., 2., 0.5]);
+        assert_eq!(
+            x.col_means,
+            vec![(1.0_f32 / 3.0_f32), 0.75, 0.75, (1.0_f32 / 3.0_f32)]
+        );
         assert_eq!(
             x.col_std,
             vec![
                 (1.0_f32 / 3.0_f32).sqrt(),
-                0.,
-                0.,
-                (1.0_f32 / 3.0_f32).sqrt()
+                (11.0_f32 / 12.0_f32).sqrt(),
+                (11.0_f32 / 12.0_f32).sqrt(),
+                (1.0_f32 / 3.0_f32).sqrt(),
             ]
         );
     }
 
     #[test]
     fn test_bin_bed_vec_rm_mul_with_vec() {
-        let num_individuals = 2;
+        let num_individuals = 4;
         let num_markers = 4;
-        let data: Vec<u8> = vec![0b11000110, 0b10010011];
+        let data: Vec<u8> = vec![0b01001011, 0b11101101, 0b11111110, 0b10110011];
         let v: Vec<f32> = vec![1., 2., 3., 4.];
         let x = BedVecRM::new(data, num_individuals, num_markers);
-        assert_eq!(vec![7., 8.], x.mul_with_vec(&v));
+        assert_eq!(
+            vec![3.8616297, -3.0927505, -5.0714474, 4.3025684],
+            x.mul_with_vec(&v)
+        );
     }
 
     #[test]
