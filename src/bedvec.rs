@@ -32,7 +32,7 @@ impl BedVecCM {
     }
 
     pub fn num_individuals(&self) -> usize {
-        self.num_individuals()
+        self.num_individuals
     }
 
     fn compute_col_stats(&mut self) {
@@ -40,7 +40,6 @@ impl BedVecCM {
         for (ix, byte) in self.data.iter().enumerate() {
             let col_ix = (ix * 4) / self.num_individuals;
             let unpacked_byte = self.unpack_byte_to_genotype_and_validity(byte);
-            dbg!(unpacked_byte, col_ix);
             let mean_update = unpacked_byte[0] * unpacked_byte[4]
                 + unpacked_byte[1] * unpacked_byte[5]
                 + unpacked_byte[2] * unpacked_byte[6]
@@ -71,12 +70,12 @@ impl BedVecCM {
     pub fn left_multiply(&self, v: &[f32]) -> Vec<f32> {
         (0..self.num_markers)
             .into_par_iter()
-            .map(|col_ix| self.col_dot_product_map_reduce(col_ix, v))
+            .map(|col_ix| self.col_dot_product(col_ix, v))
             .collect()
     }
 
     #[inline(always)]
-    pub fn col_dot_product_fold_reduce(&self, col_ix: usize, v: &[f32]) -> f32 {
+    pub fn col_dot_product(&self, col_ix: usize, v: &[f32]) -> f32 {
         let start_ix = col_ix * self.bytes_per_col;
         let (xy_sum, y_sum) = self.data[start_ix..start_ix + self.bytes_per_col]
             .par_iter()
@@ -101,34 +100,6 @@ impl BedVecCM {
                     )
                 },
             )
-            .reduce(
-                || (0., 0.),
-                |sum, next_summand| (sum.0 + next_summand.0, sum.1 + next_summand.1),
-            );
-        (xy_sum - self.col_means[col_ix] * y_sum) / self.col_std[col_ix]
-    }
-
-    #[inline(always)]
-    pub fn col_dot_product_map_reduce(&self, col_ix: usize, v: &[f32]) -> f32 {
-        let start_ix = col_ix * self.bytes_per_col;
-        let (xy_sum, y_sum) = self.data[start_ix..start_ix + self.bytes_per_col]
-            .par_iter()
-            .enumerate()
-            .map(|(byte_ix, byte)| {
-                let unpacked_byte = self.unpack_byte_to_genotype_and_validity(byte);
-                let v_ix = byte_ix * 4;
-                // this can crash if in the last byte and v is not padded with 0s
-                (
-                    unpacked_byte[0] * v[v_ix]
-                        + unpacked_byte[1] * v[v_ix + 1]
-                        + unpacked_byte[2] * v[v_ix + 2]
-                        + unpacked_byte[3] * v[v_ix + 3],
-                    unpacked_byte[4] * v[v_ix]
-                        + unpacked_byte[5] * v[v_ix + 1]
-                        + unpacked_byte[6] * v[v_ix + 2]
-                        + unpacked_byte[7] * v[v_ix + 3],
-                )
-            })
             .reduce(
                 || (0., 0.),
                 |sum, next_summand| (sum.0 + next_summand.0, sum.1 + next_summand.1),
