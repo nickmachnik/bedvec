@@ -299,6 +299,18 @@ mod tests {
     }
 
     #[test]
+    fn test_bed_vec_cm_right_multiply() {
+        let num_individuals = 4;
+        let num_markers = 4;
+        let data: Vec<u8> = vec![0b01001011, 0b11101101, 0b11111110, 0b10110011];
+        let x = BedVecCM::new(data, num_individuals, num_markers);
+        let v: Vec<f32> = vec![1., 1., 1., 1.];
+        assert_eq!(vec![0., 0., 0., 0.], x.left_multiply(&v));
+        let v: Vec<f32> = vec![2., 0., -1., 4.];
+        assert_eq!(vec![-3.0, -3.4641018, 1.5, 0.26111647], x.left_multiply(&v));
+    }
+
+    #[test]
     fn test_bed_vec_rm_stats() {
         let num_individuals = 4;
         let num_markers = 4;
