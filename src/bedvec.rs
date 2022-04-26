@@ -68,15 +68,15 @@ impl BedVecCM {
         }
     }
 
-    pub fn left_multiply(&self, v: &[f32]) -> Vec<f32> {
+    pub fn left_multiply_par(&self, v: &[f32]) -> Vec<f32> {
         (0..self.num_markers)
             .into_par_iter()
-            .map(|col_ix| self.col_dot_product(col_ix, v))
+            .map(|col_ix| self.col_dot_product_par(col_ix, v))
             .collect()
     }
 
-    #[inline(never)]
-    pub fn col_dot_product(&self, col_ix: usize, v: &[f32]) -> f32 {
+    #[inline(always)]
+    pub fn col_dot_product_par(&self, col_ix: usize, v: &[f32]) -> f32 {
         let start_ix = col_ix * self.bytes_per_col;
         let (xy_sum, y_sum) = self.data[start_ix..start_ix + self.bytes_per_col]
             .par_iter()
@@ -108,6 +108,38 @@ impl BedVecCM {
         (xy_sum - self.col_means[col_ix] * y_sum) / self.col_std[col_ix]
     }
 
+    pub fn left_multiply_seq(&self, v: &[f32]) -> Vec<f32> {
+        (0..self.num_markers)
+            .map(|col_ix| self.col_dot_product_seq(col_ix, v))
+            .collect()
+    }
+
+    #[inline(never)]
+    pub fn col_dot_product_seq(&self, col_ix: usize, v: &[f32]) -> f32 {
+        let start_ix = col_ix * self.bytes_per_col;
+        let (xy_sum, y_sum) = self.data[start_ix..start_ix + self.bytes_per_col]
+            .iter()
+            .enumerate()
+            .fold((0., 0.), |(xy_sum, y_sum), (byte_ix, byte)| {
+                let unpacked_byte = self.unpack_byte_to_genotype_and_validity(byte);
+                let v_ix = byte_ix * 4;
+                // this can crash if in the last byte and v is not padded with 0s
+                (
+                    xy_sum
+                        + unpacked_byte[0] * v[v_ix]
+                        + unpacked_byte[1] * v[v_ix + 1]
+                        + unpacked_byte[2] * v[v_ix + 2]
+                        + unpacked_byte[3] * v[v_ix + 3],
+                    y_sum
+                        + unpacked_byte[4] * v[v_ix]
+                        + unpacked_byte[5] * v[v_ix + 1]
+                        + unpacked_byte[6] * v[v_ix + 2]
+                        + unpacked_byte[7] * v[v_ix + 3],
+                )
+            });
+        (xy_sum - self.col_means[col_ix] * y_sum) / self.col_std[col_ix]
+    }
+
     #[inline(always)]
     fn unpack_byte_to_genotype_and_validity(&self, byte: &u8) -> [f32; 8] {
         let start_ix = *byte as usize * 8;
@@ -116,15 +148,15 @@ impl BedVecCM {
             .expect("Failed to unpack bed byte")
     }
 
-    pub fn left_multiply_simd_v1(&self, v: &[f32]) -> Vec<f32> {
+    pub fn left_multiply_simd_v1_par(&self, v: &[f32]) -> Vec<f32> {
         (0..self.num_markers)
             .into_par_iter()
-            .map(|col_ix| self.col_dot_product_simd_v1(col_ix, v))
+            .map(|col_ix| self.col_dot_product_simd_v1_par(col_ix, v))
             .collect()
     }
 
-    #[inline(never)]
-    pub fn col_dot_product_simd_v1(&self, col_ix: usize, v: &[f32]) -> f32 {
+    #[inline(always)]
+    pub fn col_dot_product_simd_v1_par(&self, col_ix: usize, v: &[f32]) -> f32 {
         let start_ix = col_ix * self.bytes_per_col;
         let xysum = self.data[start_ix..start_ix + self.bytes_per_col]
             .par_iter()
@@ -155,6 +187,32 @@ impl BedVecCM {
                 .try_into()
                 .expect("Failed to unpack bed byte"),
         )
+    }
+
+    pub fn left_multiply_simd_v1_seq(&self, v: &[f32]) -> Vec<f32> {
+        (0..self.num_markers)
+            .map(|col_ix| self.col_dot_product_simd_v1_seq(col_ix, v))
+            .collect()
+    }
+
+    #[inline(never)]
+    pub fn col_dot_product_simd_v1_seq(&self, col_ix: usize, v: &[f32]) -> f32 {
+        let start_ix = col_ix * self.bytes_per_col;
+        let xysum = self.data[start_ix..start_ix + self.bytes_per_col]
+            .iter()
+            .enumerate()
+            .fold(from_slice(&[0.0_f32; 8]), |xysum, (byte_ix, byte)| {
+                let unpacked_byte = self.unpack_byte_to_genotype_and_validity_simd_v1(byte);
+                let v_ix = byte_ix * 4;
+                let weights = broadcast_into_f32x8(&v[v_ix..v_ix + 4]);
+                // this can crash if in the last byte and v is not padded with 0s
+                add(xysum, multiply(unpacked_byte, weights))
+            });
+        // TODO: check that the indices check out
+        ((extract(xysum, 0) + extract(xysum, 1) + extract(xysum, 2) + extract(xysum, 3))
+            - self.col_means[col_ix]
+                * (extract(xysum, 4) + extract(xysum, 5) + extract(xysum, 6) + extract(xysum, 7)))
+            / self.col_std[col_ix]
     }
 }
 
@@ -318,9 +376,17 @@ mod tests {
         let data: Vec<u8> = vec![0b01001011, 0b11101101, 0b11111110, 0b10110011];
         let x = BedVecCM::new(data, num_individuals, num_markers);
         let v: Vec<f32> = vec![1., 1., 1., 1.];
-        assert_eq!(vec![0., 0., 0., 0.], x.left_multiply(&v));
+        assert_eq!(vec![0., 0., 0., 0.], x.left_multiply_seq(&v));
+        assert_eq!(vec![0., 0., 0., 0.], x.left_multiply_par(&v));
         let v: Vec<f32> = vec![2., 0., -1., 4.];
-        assert_eq!(vec![-3.0, -3.4641018, 1.5, 0.26111647], x.left_multiply(&v));
+        assert_eq!(
+            vec![-3.0, -3.4641018, 1.5, 0.26111647],
+            x.left_multiply_seq(&v)
+        );
+        assert_eq!(
+            vec![-3.0, -3.4641018, 1.5, 0.26111647],
+            x.left_multiply_par(&v)
+        );
     }
 
     #[test]
@@ -330,11 +396,16 @@ mod tests {
         let data: Vec<u8> = vec![0b01001011, 0b11101101, 0b11111110, 0b10110011];
         let x = BedVecCM::new(data, num_individuals, num_markers);
         let v: Vec<f32> = vec![1., 1., 1., 1.];
-        assert_eq!(vec![0., 0., 0., 0.], x.left_multiply_simd_v1(&v));
+        assert_eq!(vec![0., 0., 0., 0.], x.left_multiply_simd_v1_seq(&v));
+        assert_eq!(vec![0., 0., 0., 0.], x.left_multiply_simd_v1_par(&v));
         let v: Vec<f32> = vec![2., 0., -1., 4.];
         assert_eq!(
             vec![-3.0, -3.4641018, 1.5, 0.26111647],
-            x.left_multiply_simd_v1(&v)
+            x.left_multiply_simd_v1_seq(&v)
+        );
+        assert_eq!(
+            vec![-3.0, -3.4641018, 1.5, 0.26111647],
+            x.left_multiply_simd_v1_par(&v)
         );
     }
 
