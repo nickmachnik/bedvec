@@ -1,4 +1,4 @@
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use rand::Rng;
 use rs_bedvec::bedvec::BedVecCM;
 
@@ -26,10 +26,10 @@ fn bench_cm_left_mul_seq(c: &mut Criterion) {
     let left_w: Vec<f32> = (0..bv.num_individuals()).map(|_| rng.gen()).collect();
     for i in [20u64, 21u64].iter() {
         group.bench_with_input(BenchmarkId::new("v0", i), i, |b, i| {
-            b.iter(|| bv.left_multiply_seq(&left_w))
+            b.iter(|| black_box(bv.left_multiply_seq(&left_w)))
         });
         group.bench_with_input(BenchmarkId::new("v1 simd", i), i, |b, i| {
-            b.iter(|| bv.left_multiply_simd_v1_seq(&left_w))
+            b.iter(|| black_box(bv.left_multiply_simd_v1_seq(&left_w)))
         });
     }
     group.finish();
@@ -42,10 +42,10 @@ fn bench_cm_left_mul_par(c: &mut Criterion) {
     let left_w: Vec<f32> = (0..bv.num_individuals()).map(|_| rng.gen()).collect();
     for i in [20u64, 21u64].iter() {
         group.bench_with_input(BenchmarkId::new("v0", i), i, |b, i| {
-            b.iter(|| bv.left_multiply_par(&left_w))
+            b.iter(|| black_box(bv.left_multiply_par(&left_w)))
         });
         group.bench_with_input(BenchmarkId::new("v1 simd", i), i, |b, i| {
-            b.iter(|| bv.left_multiply_simd_v1_par(&left_w))
+            b.iter(|| black_box(bv.left_multiply_simd_v1_par(&left_w)))
         });
     }
     group.finish();
