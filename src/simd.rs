@@ -20,6 +20,11 @@ pub fn add(v: f32x8, w: f32x8) -> f32x8 {
 }
 
 #[inline]
+pub fn multiply(v: f32x8, w: f32x8) -> f32x8 {
+    unsafe { _mm256_mul_ps(v, w) }
+}
+
+#[inline]
 pub fn min(v: f32x8, w: f32x8) -> f32x8 {
     unsafe { _mm256_min_ps(v, w) }
 }
@@ -37,7 +42,7 @@ pub fn from_slice(s: &[f32]) -> f32x8 {
     unsafe { _mm256_set_ps(s[0], s[1], s[2], s[3], s[4], s[5], s[6], s[7]) }
 }
 
-///
+/// Create a 256-bit vector from two consecutive copies of a f32 slice of length 4
 #[inline]
 pub fn broadcast_into_f32x8(s: &[f32]) -> f32x8 {
     assert_eq!(s.len(), f32x4_LENGTH);
