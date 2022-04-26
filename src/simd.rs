@@ -6,6 +6,7 @@ use std::arch::x86_64::*; // Intel SIMD intrinsic mappings
 pub type f32x8 = __m256;
 #[allow(non_upper_case_globals)]
 pub const f32x8_LENGTH: usize = 8;
+#[allow(non_upper_case_globals)]
 pub const f32x4_LENGTH: usize = 4;
 
 /// Return a 256-bit vector containing 8 infinity values of f32
