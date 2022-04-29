@@ -51,6 +51,24 @@ fn bench_cm_left_mul_par(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, bench_cm_left_mul_seq, bench_cm_left_mul_par,);
+fn bench_cm_right_mul_par(c: &mut Criterion) {
+    let mut group = c.benchmark_group("cm_right_mul_par");
+    let bvcm = rand_bed_matrix_cm();
+    let mut rng = rand::thread_rng();
+    let left_w: Vec<f32> = (0..bvcm.num_markers()).map(|_| rng.gen()).collect();
+    for i in [20u64, 21u64].iter() {
+        group.bench_with_input(BenchmarkId::new("bvcm v0", i), i, |b, i| {
+            b.iter(|| black_box(bvcm.right_multiply_par(&left_w)))
+        });
+    }
+    group.finish();
+}
+
+criterion_group!(
+    benches,
+    bench_cm_left_mul_seq,
+    bench_cm_left_mul_par,
+    bench_cm_right_mul_par,
+);
 
 criterion_main!(benches);
