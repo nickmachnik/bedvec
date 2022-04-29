@@ -53,6 +53,12 @@ pub fn lowestf32(v: f32x8) -> f32 {
     unsafe { _mm256_cvtss_f32(v) }
 }
 
+// Put packed f32 from f32x4 into slice
+#[inline]
+pub fn unpack_f32x4(v: f32x4) -> [f32; 4] {
+    unsafe { std::mem::transmute::<f32x4, [f32; 4]>(v) }
+}
+
 /// Create a 256-bit vector from a f32 slice of length 8
 #[inline]
 pub fn f32x8_from_slice(s: &[f32]) -> f32x8 {
