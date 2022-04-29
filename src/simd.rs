@@ -28,6 +28,11 @@ pub fn add_f32x4(v: f32x4, w: f32x4) -> f32x4 {
 }
 
 #[inline]
+pub fn subtract_f32x4(v: f32x4, w: f32x4) -> f32x4 {
+    unsafe { _mm_sub_ps(v, w) }
+}
+
+#[inline]
 pub fn multiply_f32x8(v: f32x8, w: f32x8) -> f32x8 {
     unsafe { _mm256_mul_ps(v, w) }
 }
