@@ -4,6 +4,8 @@ use std::arch::x86_64::*; // Intel SIMD intrinsic mappings
 
 #[allow(non_camel_case_types)]
 pub type f32x8 = __m256;
+#[allow(non_camel_case_types)]
+pub type f32x4 = __m128;
 #[allow(non_upper_case_globals)]
 pub const f32x8_LENGTH: usize = 8;
 #[allow(non_upper_case_globals)]
@@ -16,13 +18,23 @@ pub fn f32x8_infty() -> f32x8 {
 }
 
 #[inline]
-pub fn add(v: f32x8, w: f32x8) -> f32x8 {
+pub fn add_f32x8(v: f32x8, w: f32x8) -> f32x8 {
     unsafe { _mm256_add_ps(v, w) }
 }
 
 #[inline]
-pub fn multiply(v: f32x8, w: f32x8) -> f32x8 {
+pub fn add_f32x4(v: f32x4, w: f32x4) -> f32x4 {
+    unsafe { _mm_add_ps(v, w) }
+}
+
+#[inline]
+pub fn multiply_f32x8(v: f32x8, w: f32x8) -> f32x8 {
     unsafe { _mm256_mul_ps(v, w) }
+}
+
+#[inline]
+pub fn multiply_f32x4(v: f32x4, w: f32x4) -> f32x4 {
+    unsafe { _mm_mul_ps(v, w) }
 }
 
 #[inline]
@@ -38,9 +50,16 @@ pub fn lowestf32(v: f32x8) -> f32 {
 
 /// Create a 256-bit vector from a f32 slice of length 8
 #[inline]
-pub fn from_slice(s: &[f32]) -> f32x8 {
+pub fn f32x8_from_slice(s: &[f32]) -> f32x8 {
     assert_eq!(s.len(), f32x8_LENGTH);
     unsafe { _mm256_set_ps(s[0], s[1], s[2], s[3], s[4], s[5], s[6], s[7]) }
+}
+
+/// Create a 128-bit vector from a f32 slice of length 4
+#[inline]
+pub fn f32x4_from_slice(s: &[f32]) -> f32x4 {
+    assert_eq!(s.len(), f32x4_LENGTH);
+    unsafe { _mm_set_ps(s[0], s[1], s[2], s[3]) }
 }
 
 /// Create a 256-bit vector from two consecutive copies of a f32 slice of length 4
