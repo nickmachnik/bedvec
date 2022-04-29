@@ -144,23 +144,8 @@ impl BedVecCM {
     // atm we seem to be using 4 ymm registers, but we have 16
     // so we could try keeping up to four sums and combine them in the end
     #[inline(never)]
-    pub fn col_dot_product_simd_v2_seq(&self, col_ix: usize, v: &[f32]) -> f32 {
-        let start_ix = col_ix * self.bytes_per_col;
-        let xysum = self.data[start_ix..start_ix + self.bytes_per_col]
-            .chunks(4)
-            .enumerate()
-            .fold(from_slice(&[0.0_f32; 8]), |xysum, (byte_ix, byte)| {
-                let unpacked_byte = self.unpack_byte_to_genotype_and_validity_simd_v1(byte);
-                let v_ix = byte_ix * 4;
-                let weights = broadcast_into_f32x8(&v[v_ix..v_ix + 4]);
-                // this can crash if in the last byte and v is not padded with 0s
-                add(xysum, multiply(unpacked_byte, weights))
-            });
-        // TODO: check that the indices check out
-        ((extract(xysum, 0) + extract(xysum, 1) + extract(xysum, 2) + extract(xysum, 3))
-            - self.col_means[col_ix]
-                * (extract(xysum, 4) + extract(xysum, 5) + extract(xysum, 6) + extract(xysum, 7)))
-            / self.col_std[col_ix]
+    pub fn col_dot_product_simd_v2_seq(&self, _col_ix: usize, _v: &[f32]) -> f32 {
+        unimplemented!()
     }
 
     #[inline(always)]
