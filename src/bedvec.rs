@@ -35,6 +35,10 @@ impl BedVecCM {
         self.num_individuals
     }
 
+    pub fn num_markers(&self) -> usize {
+        self.num_markers
+    }
+
     fn compute_col_stats(&mut self) {
         let mut n: Vec<f32> = vec![0.; self.num_markers];
         for (ix, byte) in self.data.iter().enumerate() {
