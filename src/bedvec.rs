@@ -40,7 +40,7 @@ impl BedVecCM {
         let mut n: Vec<f32> = vec![0.; self.num_markers];
         for (ix, byte) in self.data.iter().enumerate() {
             let col_ix = (ix * 4) / self.num_individuals;
-            let unpacked_byte = self.unpack_byte_to_genotype_and_validity(byte);
+            let unpacked_byte = unpack_byte_to_genotype_and_validity(byte);
             let mean_update = unpacked_byte[0] * unpacked_byte[4]
                 + unpacked_byte[1] * unpacked_byte[5]
                 + unpacked_byte[2] * unpacked_byte[6]
@@ -55,7 +55,7 @@ impl BedVecCM {
         }
         for (ix, byte) in self.data.iter().enumerate() {
             let col_ix = (ix * 4) / self.num_individuals;
-            let unpacked_byte = self.unpack_byte_to_genotype_and_validity(byte);
+            let unpacked_byte = unpack_byte_to_genotype_and_validity(byte);
             let std_update = ((unpacked_byte[0] - self.col_means[col_ix]) * unpacked_byte[4])
                 .powf(2.)
                 + ((unpacked_byte[1] - self.col_means[col_ix]) * unpacked_byte[5]).powf(2.)
@@ -94,6 +94,48 @@ impl BedVecCM {
             .collect()
     }
 
+    pub fn right_multiply_par(&self, v: &[f32]) -> Vec<f32> {
+        (0..self.num_markers)
+            .into_par_iter()
+            .fold(
+                || vec![0.; self.num_individuals],
+                |mut res, col_ix| {
+                    let start_ix = col_ix * self.bytes_per_col;
+                    for (byte_ix, byte) in self.data[start_ix..start_ix + self.bytes_per_col]
+                        .iter()
+                        .enumerate()
+                    {
+                        let row_ix = byte_ix * 4;
+                        let unpacked_byte = unpack_byte_to_genotype_and_validity(byte);
+                        res[row_ix] += (unpacked_byte[0] - self.col_means[col_ix])
+                            / self.col_std[col_ix]
+                            * unpacked_byte[4]
+                            * v[col_ix];
+                        res[row_ix + 1] += (unpacked_byte[1] - self.col_means[col_ix])
+                            / self.col_std[col_ix]
+                            * unpacked_byte[5]
+                            * v[col_ix];
+                        res[row_ix + 2] += (unpacked_byte[2] - self.col_means[col_ix])
+                            / self.col_std[col_ix]
+                            * unpacked_byte[6]
+                            * v[col_ix];
+                        res[row_ix + 3] += (unpacked_byte[3] - self.col_means[col_ix])
+                            / self.col_std[col_ix]
+                            * unpacked_byte[7]
+                            * v[col_ix];
+                    }
+                    res
+                },
+            )
+            .reduce(
+                || vec![0.; self.num_individuals],
+                |mut res, v| {
+                    (0..res.len()).for_each(|ix| res[ix] += v[ix]);
+                    res
+                },
+            )
+    }
+
     #[inline(never)]
     pub fn col_dot_product_seq(&self, col_ix: usize, v: &[f32]) -> f32 {
         let start_ix = col_ix * self.bytes_per_col;
@@ -101,7 +143,7 @@ impl BedVecCM {
             .iter()
             .enumerate()
             .fold((0., 0.), |(xy_sum, y_sum), (byte_ix, byte)| {
-                let unpacked_byte = self.unpack_byte_to_genotype_and_validity(byte);
+                let unpacked_byte = unpack_byte_to_genotype_and_validity(byte);
                 let v_ix = byte_ix * 4;
                 // this can crash if in the last byte and v is not padded with 0s
                 (
@@ -126,12 +168,12 @@ impl BedVecCM {
         let xysum = self.data[start_ix..start_ix + self.bytes_per_col]
             .iter()
             .enumerate()
-            .fold(from_slice(&[0.0_f32; 8]), |xysum, (byte_ix, byte)| {
-                let unpacked_byte = self.unpack_byte_to_genotype_and_validity_simd_v1(byte);
+            .fold(f32x8_from_slice(&[0.0_f32; 8]), |xysum, (byte_ix, byte)| {
+                let unpacked_byte = unpack_byte_to_genotype_and_validity_f32x8(byte);
                 let v_ix = byte_ix * 4;
                 let weights = broadcast_into_f32x8(&v[v_ix..v_ix + 4]);
                 // this can crash if in the last byte and v is not padded with 0s
-                add(xysum, multiply(unpacked_byte, weights))
+                add_f32x8(xysum, multiply_f32x8(unpacked_byte, weights))
             });
         // TODO: check that the indices check out
         ((extract(xysum, 0) + extract(xysum, 1) + extract(xysum, 2) + extract(xysum, 3))
@@ -140,12 +182,28 @@ impl BedVecCM {
             / self.col_std[col_ix]
     }
 
-    // try some loop unrolling to use more registers.
-    // atm we seem to be using 4 ymm registers, but we have 16
-    // so we could try keeping up to four sums and combine them in the end
+    // try using 8 f32s at a time, I have enough ymm registers for this.
+    // in order to avoid using a remainder, it would be useful to have bytes_per_col be divisible by 2.
+    // if it isn't, I can add a padding byte full of nan.
     #[inline(never)]
     pub fn col_dot_product_simd_v2_seq(&self, _col_ix: usize, _v: &[f32]) -> f32 {
-        unimplemented!()
+        unimplemented!();
+        // let start_ix = col_ix * self.bytes_per_col;
+        // let xysum = self.data[start_ix..start_ix + self.bytes_per_col]
+        //     .chunks_exact(2)
+        //     .enumerate()
+        //     .fold(from_slice(&[0.0_f32; 8]), |xysum, (byte_ix, byte)| {
+        //         let unpacked_byte = unpack_byte_to_genotype_and_validity_f32x8(byte);
+        //         let v_ix = byte_ix * 4;
+        //         let weights = broadcast_into_f32x8(&v[v_ix..v_ix + 4]);
+        //         // this can crash if in the last byte and v is not padded with 0s
+        //         add(xysum, multiply(unpacked_byte, weights))
+        //     });
+        // // TODO: check that the indices check out
+        // ((extract(xysum, 0) + extract(xysum, 1) + extract(xysum, 2) + extract(xysum, 3))
+        //     - self.col_means[col_ix]
+        //         * (extract(xysum, 4) + extract(xysum, 5) + extract(xysum, 6) + extract(xysum, 7)))
+        //     / self.col_std[col_ix]
     }
 
     #[inline(always)]
@@ -157,7 +215,7 @@ impl BedVecCM {
             .fold(
                 || (0., 0.),
                 |(xy_sum, y_sum), (byte_ix, byte)| {
-                    let unpacked_byte = self.unpack_byte_to_genotype_and_validity(byte);
+                    let unpacked_byte = unpack_byte_to_genotype_and_validity(byte);
                     let v_ix = byte_ix * 4;
                     // this can crash if in the last byte and v is not padded with 0s
                     (
@@ -188,39 +246,21 @@ impl BedVecCM {
             .par_iter()
             .enumerate()
             .fold(
-                || from_slice(&[0.0_f32; 8]),
+                || f32x8_from_slice(&[0.0_f32; 8]),
                 |xysum, (byte_ix, byte)| {
-                    let unpacked_byte = self.unpack_byte_to_genotype_and_validity_simd_v1(byte);
+                    let unpacked_byte = unpack_byte_to_genotype_and_validity_f32x8(byte);
                     let v_ix = byte_ix * 4;
                     let weights = broadcast_into_f32x8(&v[v_ix..v_ix + 4]);
                     // this can crash if in the last byte and v is not padded with 0s
-                    add(xysum, multiply(unpacked_byte, weights))
+                    add_f32x8(xysum, multiply_f32x8(unpacked_byte, weights))
                 },
             )
-            .reduce(|| from_slice(&[0.0_f32; 8]), add);
+            .reduce(|| f32x8_from_slice(&[0.0_f32; 8]), add_f32x8);
         // TODO: check that the indices check out
         ((extract(xysum, 0) + extract(xysum, 1) + extract(xysum, 2) + extract(xysum, 3))
             - self.col_means[col_ix]
                 * (extract(xysum, 4) + extract(xysum, 5) + extract(xysum, 6) + extract(xysum, 7)))
             / self.col_std[col_ix]
-    }
-
-    #[inline(always)]
-    fn unpack_byte_to_genotype_and_validity(&self, byte: &u8) -> [f32; 8] {
-        let start_ix = *byte as usize * 8;
-        BED_LOOKUP_GENOTYPE_AND_VALIDITY[start_ix..start_ix + 8]
-            .try_into()
-            .expect("Failed to unpack bed byte")
-    }
-
-    #[inline(always)]
-    fn unpack_byte_to_genotype_and_validity_simd_v1(&self, byte: &u8) -> f32x8 {
-        let start_ix = *byte as usize * 8;
-        from_slice(
-            BED_LOOKUP_GENOTYPE_AND_VALIDITY[start_ix..start_ix + 8]
-                .try_into()
-                .expect("Failed to unpack bed byte"),
-        )
     }
 }
 
@@ -229,9 +269,10 @@ pub struct BedVecRM {
     data: Vec<u8>,
     col_means: Vec<f32>,
     col_std: Vec<f32>,
+    col_means_f32x4: Vec<f32x4>,
+    col_inv_std_f32x4: Vec<f32x4>,
     num_individuals: usize,
     num_markers: usize,
-    // row_padding_bits: usize,
     bytes_per_row: usize,
 }
 
@@ -244,8 +285,11 @@ impl BedVecRM {
         };
         let mut res = Self {
             data,
-            col_means: vec![0.; num_markers],
-            col_std: vec![0.; num_markers],
+            // make divisible by four so that I can load them into f32x4 easily.
+            col_means: vec![0.; num_markers + (num_markers % 4)],
+            col_std: vec![0.; num_markers + (num_markers % 4)],
+            col_means_f32x4: Vec::with_capacity(bytes_per_row),
+            col_inv_std_f32x4: Vec::with_capacity(bytes_per_row),
             num_individuals,
             num_markers,
             bytes_per_row,
@@ -254,35 +298,15 @@ impl BedVecRM {
         res
     }
 
-    /// Create a completely random new BedVecRM of given dimensions.
-    pub fn new_rnd(num_individuals: usize, num_markers: usize) -> Self {
-        let mut rng = rand::thread_rng();
-        let row_padding_bits = (num_markers % 4) * 2;
-        let bytes_per_row = if row_padding_bits == 0 {
-            num_markers / 4
-        } else {
-            num_markers / 4 + 1
-        };
-        let data: Vec<u8> = (0..(num_individuals * bytes_per_row))
-            .map(|_| rng.gen())
-            .collect();
-        let mut res = Self {
-            data,
-            col_means: vec![0.; num_markers],
-            col_std: vec![0.; num_markers],
-            num_individuals,
-            num_markers,
-            bytes_per_row,
-        };
-        res.compute_col_stats();
-        res
+    pub fn num_markers(&self) -> usize {
+        self.num_markers
     }
 
     fn compute_col_stats(&mut self) {
         let mut n: Vec<f32> = vec![0.; self.num_markers];
         for (ix, byte) in self.data.iter().enumerate() {
             let byte_start_col_ix = (ix * 4) % (self.bytes_per_row * 4);
-            let unpacked_byte = self.unpack_byte_to_genotype_and_validity(byte);
+            let unpacked_byte = unpack_byte_to_genotype_and_validity(byte);
             self.col_means[byte_start_col_ix] += unpacked_byte[0] * unpacked_byte[4];
             n[byte_start_col_ix] += unpacked_byte[4];
             self.col_means[byte_start_col_ix + 1] += unpacked_byte[1] * unpacked_byte[5];
@@ -297,7 +321,7 @@ impl BedVecRM {
         }
         for (ix, byte) in self.data.iter().enumerate() {
             let byte_start_col_ix = (ix * 4) % (self.bytes_per_row * 4);
-            let unpacked_byte = self.unpack_byte_to_genotype_and_validity(byte);
+            let unpacked_byte = unpack_byte_to_genotype_and_validity(byte);
             self.col_std[byte_start_col_ix] +=
                 ((unpacked_byte[0] - self.col_means[byte_start_col_ix]) * unpacked_byte[4])
                     .powf(2.);
@@ -314,23 +338,38 @@ impl BedVecRM {
         for (ix, e) in self.col_std.iter_mut().enumerate() {
             *e = (*e / (n[ix] - 1.)).sqrt();
         }
+
+        // col stats will later come as vecs from disc that just need to be loaded into the struct,
+        // so Ill do the same here.
+        self.col_means_f32x4 = self
+            .col_means
+            .par_chunks_exact(4)
+            .map(f32x4_from_slice)
+            .collect();
+        self.col_inv_std_f32x4 = self
+            .col_std
+            .par_chunks_exact(4)
+            .map(|chunk| {
+                f32x4_from_slice(&[1. / chunk[0], 1. / chunk[1], 1. / chunk[2], 1. / chunk[3]])
+            })
+            .collect();
     }
 
-    pub fn right_multiply(&self, v: &[f32]) -> Vec<f32> {
+    pub fn right_multiply_par(&self, v: &[f32]) -> Vec<f32> {
         (0..self.num_individuals)
             .into_par_iter()
-            .map(|row_ix| self.row_dot_product(row_ix, v))
+            .map(|row_ix| self.row_dot_product_par(row_ix, v))
             .collect()
     }
 
     #[inline(always)]
-    fn row_dot_product(&self, row_ix: usize, v: &[f32]) -> f32 {
+    fn row_dot_product_par(&self, row_ix: usize, v: &[f32]) -> f32 {
         let start_ix = row_ix * self.bytes_per_row;
         self.data[start_ix..start_ix + self.bytes_per_row]
             .par_iter()
             .enumerate()
             .map(|(byte_ix, byte)| {
-                let unpacked_byte = self.unpack_byte_to_genotype_and_validity(byte);
+                let unpacked_byte = unpack_byte_to_genotype_and_validity(byte);
                 let v_ix = byte_ix * 4;
                 // this is (x_j - mu_j * I[x_j is not na]) / sig_j * v_j
                 ((unpacked_byte[0] - self.col_means[v_ix]) * unpacked_byte[4] / self.col_std[v_ix]
@@ -348,13 +387,78 @@ impl BedVecRM {
             .sum()
     }
 
+    pub fn right_multiply_simd_v1_par(&self, v: &[f32]) -> Vec<f32> {
+        (0..self.num_individuals)
+            .into_par_iter()
+            .map(|row_ix| self.row_dot_product_simd_v1_par(row_ix, v))
+            .collect()
+    }
+
     #[inline(always)]
-    fn unpack_byte_to_genotype_and_validity(&self, byte: &u8) -> [f32; 8] {
-        let start_ix = *byte as usize * 8;
+    pub fn row_dot_product_simd_v1_par(&self, row_ix: usize, v: &[f32]) -> f32 {
+        let start_ix = row_ix * self.bytes_per_row;
+        let xy_sum = self.data[start_ix..start_ix + self.bytes_per_row]
+            .par_iter()
+            .enumerate()
+            .fold(
+                || f32x4_from_slice(&[0.0_f32; 4]),
+                |xysum, (byte_ix, byte)| {
+                    let unpacked_genotypes = unpack_byte_to_genotype_f32x4(byte);
+                    let unpacked_validity = unpack_byte_to_validity_f32x4(byte);
+                    let v_ix = byte_ix * 4;
+                    let weights = f32x4_from_slice(&v[v_ix..v_ix + 4]);
+                    let std_x = multiply_f32x4(
+                        self.col_inv_std_f32x4[byte_ix],
+                        multiply_f32x4(
+                            unpacked_validity,
+                            subtract_f32x4(unpacked_genotypes, self.col_means_f32x4[byte_ix]),
+                        ),
+                    );
+                    // this can crash if in the last byte and v is not padded with 0s
+                    add_f32x4(xysum, multiply_f32x4(std_x, weights))
+                },
+            )
+            .reduce(|| f32x4_from_slice(&[0.0_f32; 4]), add_f32x4);
+        unpack_f32x4(xy_sum).iter().sum()
+    }
+}
+
+#[inline(always)]
+fn unpack_byte_to_genotype_and_validity(byte: &u8) -> [f32; 8] {
+    let start_ix = *byte as usize * 8;
+    BED_LOOKUP_GENOTYPE_AND_VALIDITY[start_ix..start_ix + 8]
+        .try_into()
+        .expect("Failed to unpack bed byte")
+}
+
+#[inline(always)]
+fn unpack_byte_to_genotype_and_validity_f32x8(byte: &u8) -> f32x8 {
+    let start_ix = *byte as usize * 8;
+    f32x8_from_slice(
         BED_LOOKUP_GENOTYPE_AND_VALIDITY[start_ix..start_ix + 8]
             .try_into()
-            .expect("Failed to unpack bed byte")
-    }
+            .expect("Failed to unpack bed byte"),
+    )
+}
+
+#[inline(always)]
+fn unpack_byte_to_genotype_f32x4(byte: &u8) -> f32x4 {
+    let start_ix = *byte as usize * 4;
+    f32x4_from_slice(
+        BED_LOOKUP_GENOTYPE[start_ix..start_ix + 4]
+            .try_into()
+            .expect("Failed to unpack bed byte"),
+    )
+}
+
+#[inline(always)]
+fn unpack_byte_to_validity_f32x4(byte: &u8) -> f32x4 {
+    let start_ix = *byte as usize * 4;
+    f32x4_from_slice(
+        BED_LOOKUP_VALIDITY[start_ix..start_ix + 4]
+            .try_into()
+            .expect("Failed to unpack bed byte"),
+    )
 }
 
 #[cfg(test)]
@@ -372,6 +476,12 @@ mod tests {
         //  na, 0., 1., 0.,
         //  1., 0., 0., 0.,
         //  0., 2., 0., 1.,
+        // )
+        // m = (
+        //  0., na, 1., 0.,
+        //  1., 0., 0., 2.,
+        //  2., 1., 0., 0.,
+        //  na, 0., 0., 1.,
         // )
         assert_eq!(x.col_means, vec![1., (1. / 3.), 0.25, 0.75]);
         assert_eq!(x.col_std, vec![1.0, 0.57735026, 0.5, 0.95742714]);
@@ -418,6 +528,19 @@ mod tests {
     }
 
     #[test]
+    fn test_bed_vec_cm_right_multiply() {
+        let num_individuals = 4;
+        let num_markers = 4;
+        let data: Vec<u8> = vec![0b01001011, 0b11101101, 0b11111110, 0b10110011];
+        let x = BedVecCM::new(data, num_individuals, num_markers);
+        let v: Vec<f32> = vec![1., 1., 1., 1.];
+        assert_eq!(
+            vec![-0.2833494, 0.22823209, 0.8713511, -0.8162339],
+            x.right_multiply_par(&v)
+        );
+    }
+
+    #[test]
     fn test_bed_vec_rm_stats() {
         let num_individuals = 4;
         let num_markers = 4;
@@ -453,7 +576,11 @@ mod tests {
         let x = BedVecRM::new(data, num_individuals, num_markers);
         assert_eq!(
             vec![3.8616297, -3.0927505, -5.0714474, 4.3025684],
-            x.right_multiply(&v)
+            x.right_multiply_par(&v)
+        );
+        assert_eq!(
+            vec![3.8616297, -3.0927505, -5.0714483, 4.302569],
+            x.right_multiply_simd_v1_par(&v)
         );
     }
 }
