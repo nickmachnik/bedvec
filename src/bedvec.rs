@@ -1,5 +1,6 @@
 use crate::bed_lookup_tables::*;
 use crate::simd::*;
+use ndarray::{arr1, Array1};
 use rayon::prelude::*;
 
 /// Colum-major bed-data in memory.
@@ -97,11 +98,11 @@ impl BedVecCM {
             .collect()
     }
 
-    pub fn right_multiply_par(&self, v: &[f32]) -> Vec<f32> {
+    pub fn right_multiply_par(&self, v: &[f32]) -> Array1<f32> {
         (0..self.num_markers)
             .into_par_iter()
             .fold(
-                || vec![0.; self.num_individuals],
+                || Array1::zeros(self.num_individuals),
                 |mut res, col_ix| {
                     let start_ix = col_ix * self.bytes_per_col;
                     for (byte_ix, byte) in self.data[start_ix..start_ix + self.bytes_per_col]
@@ -131,7 +132,7 @@ impl BedVecCM {
                 },
             )
             .reduce(
-                || vec![0.; self.num_individuals],
+                || Array1::zeros(self.num_individuals),
                 |mut res, v| {
                     (0..res.len()).for_each(|ix| res[ix] += v[ix]);
                     res
@@ -379,7 +380,7 @@ mod tests {
         let x = BedVecCM::new(data, num_individuals, num_markers);
         let v: Vec<f32> = vec![1., 1., 1., 1.];
         assert_eq!(
-            vec![-0.2833494, 0.22823209, 0.8713511, -0.8162339],
+            arr1(&[-0.2833494, 0.22823209, 0.8713511, -0.8162339]),
             x.right_multiply_par(&v)
         );
     }
