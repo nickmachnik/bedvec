@@ -91,11 +91,13 @@ impl BedVecCM {
             .collect()
     }
 
-    pub fn left_multiply_simd_v1_par(&self, v: &[f32]) -> Vec<f32> {
-        (0..self.num_markers)
-            .into_par_iter()
-            .map(|col_ix| self.col_dot_product_simd_v1_par(col_ix, v))
-            .collect()
+    pub fn left_multiply_simd_v1_par(&self, v: &[f32]) -> Array1<f32> {
+        Array1::from_vec(
+            (0..self.num_markers)
+                .into_par_iter()
+                .map(|col_ix| self.col_dot_product_simd_v1_par(col_ix, v))
+                .collect(),
+        )
     }
 
     pub fn right_multiply_par(&self, v: &Array1<f32>) -> Array1<f32> {
@@ -360,14 +362,14 @@ mod tests {
         let x = BedVecCM::new(data, num_individuals, num_markers);
         let v: Vec<f32> = vec![1., 1., 1., 1.];
         assert_eq!(vec![0., 0., 0., 0.], x.left_multiply_simd_v1_seq(&v));
-        assert_eq!(vec![0., 0., 0., 0.], x.left_multiply_simd_v1_par(&v));
+        assert_eq!(arr1(&[0., 0., 0., 0.]), x.left_multiply_simd_v1_par(&v));
         let v: Vec<f32> = vec![2., 0., -1., 4.];
         assert_eq!(
             vec![-3.0, -3.4641018, 1.5, 0.26111647],
             x.left_multiply_simd_v1_seq(&v)
         );
         assert_eq!(
-            vec![-3.0, -3.4641018, 1.5, 0.26111647],
+            arr1(&[-3.0, -3.4641018, 1.5, 0.26111647]),
             x.left_multiply_simd_v1_par(&v)
         );
     }
