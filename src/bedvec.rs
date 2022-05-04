@@ -98,7 +98,7 @@ impl BedVecCM {
             .collect()
     }
 
-    pub fn right_multiply_par(&self, v: &[f32]) -> Array1<f32> {
+    pub fn right_multiply_par(&self, v: &Array1<f32>) -> Array1<f32> {
         (0..self.num_markers)
             .into_par_iter()
             .fold(
@@ -378,7 +378,7 @@ mod tests {
         let num_markers = 4;
         let data: Vec<u8> = vec![0b01001011, 0b11101101, 0b11111110, 0b10110011];
         let x = BedVecCM::new(data, num_individuals, num_markers);
-        let v: Vec<f32> = vec![1., 1., 1., 1.];
+        let v: Array1<f32> = arr1(&[1., 1., 1., 1.]);
         assert_eq!(
             arr1(&[-0.2833494, 0.22823209, 0.8713511, -0.8162339]),
             x.right_multiply_par(&v)
