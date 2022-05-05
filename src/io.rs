@@ -1,8 +1,6 @@
 //! Functionality for reading .bed data from disk
 
 use crate::bedvec::BedVecCM;
-use std::fs::File;
-use std::io::Read;
 
 // For now I expect to read whole .bed files in CM order.
 // If I go for batching, I will probably still be doing that in memory.
@@ -45,5 +43,18 @@ impl BedReader {
         } else {
             BedVecCM::new(bytes, self.num_individuals, self.num_markers)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_bed_loading() {
+        let reader = BedReader::new("resources/test/three_by_two.bed", 3, 2);
+        let bvcm = reader.read_into_bedvec();
+        let exp: Vec<u8> = vec![0xf8, 0x92];
+        assert_eq!(bvcm.data(), exp);
     }
 }
