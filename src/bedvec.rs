@@ -1,6 +1,6 @@
 use crate::bed_lookup_tables::*;
 use crate::simd::*;
-use ndarray::{arr1, Array1};
+use ndarray::Array1;
 use rayon::prelude::*;
 
 /// Colum-major bed-data in memory.
@@ -38,6 +38,10 @@ impl BedVecCM {
 
     pub fn num_markers(&self) -> usize {
         self.num_markers
+    }
+
+    pub fn data(&self) -> Vec<u8> {
+        self.data.clone()
     }
 
     fn compute_col_stats(&mut self) {
@@ -311,6 +315,7 @@ fn unpack_byte_to_validity_f32x4(byte: &u8) -> f32x4 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ndarray::arr1;
 
     #[test]
     fn test_bed_vec_cm_stats() {
