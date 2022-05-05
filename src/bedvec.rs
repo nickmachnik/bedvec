@@ -108,6 +108,8 @@ impl BedVecCM {
         (0..self.num_markers)
             .into_par_iter()
             .fold(
+                // TODO: num_individuals here is problematic if num_individuals is not divisible by four.
+                // then the indexing in the last byte will be out of bounds.
                 || Array1::zeros(self.num_individuals),
                 |mut res, col_ix| {
                     let start_ix = col_ix * self.bytes_per_col;

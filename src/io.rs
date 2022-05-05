@@ -52,7 +52,7 @@ mod tests {
 
     #[test]
     fn test_bed_loading() {
-        let reader = BedReader::new("resources/test/three_by_two.bed", 3, 2);
+        let reader = BedReader::new("resources/test/three_by_two.bed", 4, 2);
         let bvcm = reader.read_into_bedvec();
         let exp: Vec<u8> = vec![0xf8, 0x92];
         assert_eq!(bvcm.data(), exp);
